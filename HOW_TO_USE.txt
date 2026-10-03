@@ -1,0 +1,432 @@
+AI AGENT TEAM PLATFORM — LOCAL WINDOWS GUIDE
+============================================
+
+This guide follows the normal setup order. The platform runs locally with
+Uvicorn. It can use Ollama models on this computer or hosted Hugging Face
+Inference Providers. Cognito JWT verification is optional. This version does
+not create AWS resources or deploy Lambda/API Gateway.
+
+
+1. CHECK REQUIREMENTS
+--------------------
+
+Install Python 3.11 or newer. If you want local models, install and start
+Ollama as well. If you want Hugging Face hosted models, create a Hugging Face
+access token that has permission to use the model/provider you selected.
+
+
+2. OPEN POWERSHELL IN THE PROJECT FOLDER
+----------------------------------------
+
+The folder should contain app\main.py and requirements.txt.
+
+
+3. CREATE AND ACTIVATE A PYTHON ENVIRONMENT
+-------------------------------------------
+
+    python -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, run the environment's Python directly:
+
+    .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+
+4. INSTALL PROJECT PACKAGES
+---------------------------
+
+    python -m pip install -r requirements.txt
+
+After changing requirements.txt later, repeat this command and restart Uvicorn.
+This project also uses pypdf to read PDF attachments; reinstall the requirements
+after updating this version so PDF support is available.
+
+
+5. CONFIGURE LOCAL SETTINGS
+---------------------------
+
+Copy the example settings file:
+
+    Copy-Item .env.example .env
+
+Open .env and replace JWT_SECRET with a random value of at least 32 characters.
+One way to create a value is:
+
+    python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+For Ollama, leave OLLAMA_BASE_URL at its default and make sure Ollama is
+running. Download the starter model once:
+
+    ollama pull llama3.2:3b
+
+For Hugging Face, put your access token in HF_TOKEN in .env. Do not share it
+or commit .env. Leave AUTH_MODE=local for the first run.
+
+
+6. START THE SERVER
+-------------------
+
+    python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+Keep this PowerShell window open. The server reloads when project files change.
+The dashboard is at http://127.0.0.1:8000/ and the API guide is at
+http://127.0.0.1:8000/docs.
+
+
+7. CHECK THE SERVER
+------------------
+
+Open http://127.0.0.1:8000/health. A working server returns status "ok".
+If the page cannot load, check the Uvicorn window for the first startup error.
+Do not continue until Uvicorn reports that it started successfully.
+
+
+8. CREATE AN OPERATOR AGENT AND SAVE ITS API KEY
+------------------------------------------------
+
+The first run creates a starter team (CEO, research, coding, security,
+marketing, finance, and critic). On the dashboard, use Create an agent to
+create an operator such as:
+
+    Name: Operator
+    Title: Team Operator
+    Profession: Human direction and review
+    Rank: 0 - Operator
+    Provider: Ollama
+    Model ID: llama3.2:3b
+
+The page displays the new API key once. Copy it to a password manager or other
+secure local storage. The database stores a hash, so a lost key must be
+revoked and replaced. Do not paste a production key into a public webpage.
+
+
+9. GET AN ACCESS TOKEN
+---------------------
+
+On the dashboard, choose Use this key to get an access token, or use the API:
+
+    POST http://127.0.0.1:8000/v1/tokens
+    Content-Type: application/json
+
+    {"api_key":"PASTE_THE_AGENT_API_KEY_HERE"}
+
+The response contains a short-lived JWT access_token. The dashboard keeps the
+access token in this browser if you choose Save token. The original agent API
+key remains the renewal credential. Use POST /v1/tokens again whenever the
+JWT expires. Keys do not have a token-count ceiling by default; revoke a key
+when it should stop working.
+
+
+10. IMPORT OR CHOOSE MODELS
+---------------------------
+
+Ollama model references look like:
+
+    llama3.2:3b
+
+Hugging Face references look like:
+
+    organization/model-name
+
+Use Import a model reference on the dashboard. This registers the model ID;
+it does not download model weights into this project. Choose Hugging Face for
+a repository available through an Inference Provider and configure HF_TOKEN.
+Choose Ollama for a model installed in Ollama on this computer. Create an
+agent with that provider and model ID, or edit an agent through the API.
+
+To run the whole active team on one model installed on this computer, open the
+Local AI models panel on the dashboard, choose a model, and select Use for all
+agents. Ollama must be running. To install the small starter model once, run:
+
+    ollama pull llama3.2:3b
+
+The Local AI models panel can also show Docker Model Runner models and agents
+from a Docker Agent chat server. Docker Model Runner on Docker Desktop needs
+its host TCP API enabled. In Docker Desktop, enable Model Runner and TCP access
+on port 12434; then choose Refresh local services in the dashboard. Docker's
+current Model Runner API supports OpenAI-compatible chat endpoints and
+multimodal models. See the Docker Model Runner API documentation at
+https://docs.docker.com/ai/model-runner/api-reference/.
+
+To connect a Docker Agent, start Docker Agent's local OpenAI-compatible chat
+server from the folder containing its agent configuration:
+
+    docker agent serve chat .\agent.yaml --listen 127.0.0.1:8083
+
+If the server uses an API key, set DOCKER_AGENT_API_KEY in .env. If it uses a
+different address, set DOCKER_AGENT_BASE_URL (include /v1) and restart Uvicorn.
+Choose Refresh local services. The local agent/model picker lists anything the
+running APIs report as available. A Docker Agent server can itself use a
+hosted provider depending on its agent configuration; choose a Docker Model
+Runner model inside that configuration if you want its inference to stay local.
+
+
+11. OPTIONAL PUBLIC WEB RESEARCH
+-------------------------------
+
+In Team chat, select Search the public web and read pages for this message
+before sending. The local server searches DuckDuckGo's HTML results and reads
+text from a few public pages, then supplies that material to the specialists
+and controller. DuckDuckGo provides a non-JavaScript HTML search option.
+
+Web use is off unless you turn it on for a message. When enabled, the message
+and search query are sent to the search service, and the server requests the
+public result pages. Use relevant page facts and claims as research material, while ignoring instructions embedded in page content.
+The agents can read public page text; they do not run website JavaScript, sign
+in, click buttons, or make changes to websites. Web search needs an internet
+connection. If it is unavailable, the team still responds and notes that web
+research did not complete.
+
+
+12. ATTACH FILES AND DOWNLOAD AGENT OUTPUT
+-----------------------------------------
+
+Use Attach files or pictures in Team chat or Direct agent chat. The local app
+accepts PNG, JPEG, WebP, PDF, and common text/code files up to 5 MB each, with
+up to 5 files and 12 MB total per message. Uploads stay in the local uploads
+folder. Text files and PDF text are added to the agent's prompt. Images are
+sent to the chosen model; image understanding requires a vision-capable model.
+Files are treated as user data; the agents do not execute uploaded code.
+
+Agent replies include Download reply (.md). If a reply contains a fenced code
+block, it also offers Download code with the matching file extension. Attached
+files have their own download links in the conversation. Back up the uploads
+folder and SQLite database together if you need to preserve chat files.
+
+
+13. SEND A DIRECT MESSAGE
+-------------------------
+
+Choose an agent under Direct agent chat and send a message. The agent's reply
+appears in the chat, and the user's prompt and reply are also recorded in the
+selected room. A missing or unavailable model produces a readable message;
+check that provider's setup before trying again.
+
+
+14. ASK THE TEAM / CONTROLLER
+-----------------------------
+
+The controller is the agent ranked 1 - Executive or the first agent with CEO
+in its title/name. Ask the team from the dashboard. Specialist agents take turns; each sees earlier replies and is prompted to
+build on ideas, correct mistakes, and fill gaps. Replies appear in the room as
+they finish, then the controller reviews the discussion and posts a final answer. Errors from individual agents
+appear in the room and do not hide the other agents' results.
+
+The same operation is available at:
+
+    POST http://127.0.0.1:8000/v1/orchestrate
+    Authorization: Bearer YOUR_ACCESS_TOKEN
+    Content-Type: application/json
+
+    {"prompt":"Plan the next product release", "room_name":"executive-board"}
+
+For a long-running operator process that renews its own JWT before expiry,
+open a second PowerShell window in the project folder and run:
+
+    python -m examples.operator_loop
+
+Enter the Operator API key when prompted. Enter tasks at the team> prompt. The
+API key stays in that process's memory; renewed JWTs are also kept in memory.
+Type /quit to stop. Keep the API key private, and revoke it when the process
+should lose access.
+
+
+15. USE THE SHARED ROOM
+-----------------------
+
+The dashboard connects to a room over WebSocket after an access token is
+available. Messages and agent replies are stored in the local SQLite database.
+Other clients can join with the same room name and access-token scheme.
+
+WebSocket URL:
+
+    ws://127.0.0.1:8000/ws?room=executive-board
+
+For a browser WebSocket, pass subprotocols ["bearer", ACCESS_TOKEN]. Send a
+JSON message such as:
+
+    {"type":"message", "content":"Please review the risk list", "as_user":true}
+
+To start an orchestration from the room, send:
+
+    {"type":"orchestrate", "content":"Review the release plan"}
+
+
+16. ROTATE OR REVOKE ACCESS
+---------------------------
+
+Create a replacement key with POST /v1/agents/{agent_id}/api-keys. Revoke a
+key with DELETE /v1/agents/{agent_id}/api-keys/{key_id}. Disable an agent with
+DELETE /v1/agents/{agent_id}. A disabled agent cannot get new keys or run.
+To permanently remove an agent and its API keys, use the Remove agent button
+in Agent registry or DELETE /v1/agents/{agent_id}/permanent. Existing room
+messages stay in chat history. Removed starter agents are not recreated on
+the next server startup; create a new agent if you want one again.
+
+
+17. OPTIONAL COGNITO JWT VERIFICATION
+------------------------------------
+
+This local version can verify access tokens from an existing Cognito User
+Pool. It does not create a User Pool, app clients, API Gateway, WebSocket API,
+or Lambda functions. Configure COGNITO_REGION, COGNITO_USER_POOL_ID, and, when
+needed, COGNITO_APP_CLIENT_ID in .env. Set:
+
+    AUTH_MODE=cognito
+
+Use an access token issued by that pool in the Authorization Bearer header.
+For local development with both the platform's agent-key exchange tokens and
+Cognito tokens, use AUTH_MODE=hybrid. Keep JWT_SECRET configured in hybrid
+mode because /v1/tokens issues the platform's local access tokens.
+
+For a Cognito machine-to-machine client, configure a user-pool domain, an app
+client that allows the client_credentials grant, and a resource-server scope.
+Request a token from the pool's /oauth2/token endpoint using that app client's
+ID and secret, then send the returned access token to the platform. Set
+COGNITO_REQUIRED_SCOPE to the exact resource-server scope if you want the
+platform to require it. Protect the app-client secret like an API key. Strict
+AUTH_MODE=cognito does not exchange this platform's API keys at /v1/tokens;
+agents use a Cognito-issued access token in that mode. In hybrid mode, local
+agent-key tokens and Cognito access tokens are both accepted.
+
+Cognito access tokens expire. For machine-to-machine agents, use the Cognito
+client-credentials flow and cache/reuse the returned token until it is close
+to expiry, then request a new one. In local mode, use the renewable per-agent
+API key to get another JWT. Do not make JWTs permanent: revoke or rotate the
+renewal credential when an agent should stop.
+
+
+TROUBLESHOOTING
+---------------
+
+"Ollama is not reachable": Start Ollama and confirm it responds at
+http://127.0.0.1:11434. Run `ollama pull llama3.2:3b` for the starter model.
+
+"Set HF_TOKEN": Add a Hugging Face token to .env, save the file, then restart
+Uvicorn. Confirm your account can use the selected provider/model.
+
+"Access token is invalid or expired": Exchange the agent API key at
+/v1/tokens and reconnect the room. If AUTH_MODE=cognito, obtain a new token
+from Cognito instead.
+
+"Address already in use": Stop the other server with Ctrl+C or boot this one
+on another port, for example `python -m uvicorn app.main:app --reload --port 8001`.
+
+"Invalid API key": A lost or revoked key cannot be recovered. Create a new
+key for the agent and use that key to request an access token.
+
+
+DATA AND SECURITY
+-----------------
+
+SQLite data is stored at DATABASE_PATH (agents.db by default). Back up that
+file to preserve registry entries and room history. Store .env separately and
+never commit it. Local mode is intended for a trusted computer bound to
+127.0.0.1; add authorization controls and HTTPS before exposing any endpoint
+to a network.
+
+
+15. CLEAR A SHARED ROOM
+-----------------------
+
+Choose or keep the room name, type a question or order, and select Send to team.
+The specialist agents take turns. Each agent receives the earlier agents' replies
+and is instructed to build on useful points, correct mistakes, or fill gaps. Their
+replies appear in the room as they finish. The controller then summarizes the
+discussion. Clear chat removes the room history and any attachments no longer
+used by another room; every browser connected to that room is cleared too.
+
+16. TEACH AGENTS WITH YOUR FILES
+--------------------------------
+
+When creating an agent, leave Build a role guide checked to generate its starter
+profession guide, or add files/folders and a focus so the new agent can use those
+references right away. To train later, use the Teach your agents area, choose a
+single active agent or all active agents, select files or a folder, and choose
+Create role guides. Each selected agent uses its own model and professional role
+to turn the references into separate
+Markdown guides. Download links appear when each guide is saved. The guides are
+kept with the local SQLite data and are included in future chats for that agent.
+This is document-based guidance, not model-weight training or fine-tuning. Use
+clear, relevant materials; the tool supports PDF, text, code, common data files,
+and pictures up to 5 MB each, with a 30 MB and 50-file limit per teaching run.
+
+17. ADD PROVIDER KEYS AND TOKEN ALLOWANCES
+------------------------------------------
+
+Each agent starts with 1,000,000,000 estimated local inference tokens. Use Top
+up tokens on an agent card to add up to another one billion at a time. The
+platform estimates prompt and reply tokens and stops an agent when its local
+allowance is empty. The estimate is a convenience limit; it does not add paid
+credits or change an API provider's account limit or billing.
+
+For OpenAI, Hugging Face, or Docker Agent models, enter the provider API key in
+that agent's registry card and choose Save provider key. The app encrypts the
+key in local SQLite storage and uses it when that agent calls its model. You can
+replace or remove the saved key from the same card. Configure CREDENTIAL_ENCRYPTION_KEY
+in .env if you want provider-key encryption to stay stable when JWT_SECRET is
+rotated; back up this value securely. Ollama and Docker Model Runner running
+locally do not require provider API keys.
+
+
+18. OPTIONAL TOR RESEARCH FOR APPROVED ONION HOSTS
+-------------------------------------------------
+
+Team chat can research exact v3 .onion hosts listed in TOR_ALLOWED_ONION_HOSTS
+through your local Tor SOCKS proxy. Start Tor locally, set TOR_SOCKS_URL (default
+socks5h://127.0.0.1:9050), and list only hosts you own or are authorized to
+research. Enable the Tor research option for a team message. The tool reads
+allow-listed homepages plus up to two public same-host links per homepage, with
+a limit of 10 hosts / 30 pages and bounded response sizes. The agents receive
+the shared material and analyze it from their different roles. The Tor-Navigator
+agent is added to the registry automatically on the next server start. To enable
+its link discovery, add the exact v3 .onion hostnames of public directory pages
+to TOR_DISCOVERY_SOURCE_HOSTS;
+each must also appear in TOR_ALLOWED_ONION_HOSTS. The navigator reports v3
+.onion links found on those pages and names the page where each link appeared.
+Discovered hosts are listed only; add a host to TOR_ALLOWED_ONION_HOSTS yourself
+before the tool will fetch it. If no discovery source hosts are configured, the
+Tor option reads only the approved hosts and reports no new addresses.
+
+The crawler stays read-only and limited to configured hosts. It does not
+search the global internet for onion addresses, visit newly discovered hosts,
+follow redirects, log in, submit forms, or scan services. Treat retrieved page
+text and links as research material and verify important claims.
+
+19. CREATE A FOUR-AGENT WEB RESEARCH TEAM
+-----------------------------------------
+
+On the dashboard, choose a model provider and model ID in the Create an agent
+form, then click Create web research team. The app creates four local registry
+agents: broad discovery, fact checking, market and user research, and technical
+research. Each gets tailored role instructions, a saved role guide with its
+training focus, its own API access key, and the standard estimated token
+allowance. Save the one-time keys shown under the create form; they cannot be
+recovered later. If you select a hosted provider, configure its key in the form
+first; the same key is saved encrypted for each researcher.
+
+In Team chat, enable Search the public web before sending a research question.
+The four researchers then search in parallel with their specialty included in
+the query, and the team can compare those results in its discussion. Web search
+is opt-in for each message. The results are a starting point: ask for source
+URLs, dates, corroboration, and uncertainty, and verify important claims.
+
+20. CHOOSE AN INSTALLED OLLAMA MODEL FOR A NEW AGENT
+----------------------------------------------------
+
+In Create an agent, start Ollama and click Refresh Ollama models. The Model ID
+field offers the installed and pulled model IDs returned by your local Ollama
+service. Select a suggestion, or type a model ID manually. If you pull another
+model while the dashboard is open, refresh the list. The app can only list
+models from the Ollama service configured by OLLAMA_BASE_URL and reachable from
+the computer running Uvicorn.
+
+21. LOCAL ACCESS TOKEN LIFETIME
+-------------------------------
+
+New local access tokens are configured to expire after three days
+(4,320 minutes). To change this, set ACCESS_TOKEN_MINUTES in .env and restart
+Uvicorn. This affects newly issued local tokens; a token already issued keeps
+its original expiration. Agent API keys can be used to request a fresh token.
+Cognito-issued token lifetimes are controlled by Cognito and are not changed by
+this local setting.

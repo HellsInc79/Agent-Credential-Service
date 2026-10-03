@@ -1,0 +1,18 @@
+CEO-AI
+│
+├─ Technology Department
+│   ├─ CTO-AI
+│   ├─ Coding-AI
+│   └─ Security-AI
+│
+├─ Finance Department
+│   ├─ CFO-AI
+│   └─ Finance-AI
+│
+├─ Marketing Department
+│   ├─ CMO-AI
+│   └─ Marketing-AI
+│
+└─ Research Department
+    ├─ Research Director
+    └─ Research-AI
