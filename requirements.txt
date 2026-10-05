@@ -7,3 +7,4 @@ pydantic>=2.10,<3
 huggingface_hub>=0.30,<2
 pypdf>=5,<7
 requests[socks]>=2.32,<3
+Jinja2>=3.1,<4

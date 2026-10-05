@@ -1,0 +1,6 @@
+# CPU-only PyTorch and shared training packages for this project's .venv.
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+-r requirements-training.txt
+torch>=2.4,<3
+numpy>=1.26

@@ -18,36 +18,50 @@ access token that has permission to use the model/provider you selected.
 2. OPEN POWERSHELL IN THE PROJECT FOLDER
 ----------------------------------------
 
-The folder should contain app\main.py and requirements.txt.
+Open PowerShell and move into the Windows project folder:
+
+    Set-Location -LiteralPath "C:\Users\Hells\OneDrive\Documents\apikey agent hack\AI_Agent_Credential_Service_Python (1)\agent_credential_service"
+
+The folder should contain app\main.py and requirements.txt. You can also open
+PowerShell from File Explorer by opening the project folder, clicking the
+address bar, typing powershell, and pressing Enter.
 
 
-3. CREATE AND ACTIVATE A PYTHON ENVIRONMENT
--------------------------------------------
+3. RUN THE WINDOWS SETUP
+------------------------
 
-    python -m venv .venv
-    .\.venv\Scripts\Activate.ps1
+From the project folder, run setup.ps1. It creates the local-only data folders,
+creates the project's .venv, installs requirements.txt, and copies .env.example
+to .env:
 
-If PowerShell blocks activation, run the environment's Python directly:
+    .\setup.ps1
+
+For local model training, choose one optional package set for your hardware:
+
+    .\setup.ps1 -TrainingDevice GPU
+    .\setup.ps1 -TrainingDevice CPU
+
+Choose one training-device command. GPU packages are large and may take time
+to download. Setup does not download model weights.
+
+If PowerShell blocks the script, allow scripts for this PowerShell window only,
+then run setup again:
+
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    .\setup.ps1
+
+After changing requirements.txt later, update packages with this project's
+Python and restart Uvicorn:
 
     .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
+The uploads, video_studio, trained_models, base_models, hf_cache, and
+tools\runtime folders are private local data and are excluded from Git. They
+store uploaded files, generated videos, model adapters/checkpoints, downloaded
+models, caches, and installed tools. Do not put secrets in tracked source files.
 
-4. INSTALL PROJECT PACKAGES
+4. CONFIGURE LOCAL SETTINGS
 ---------------------------
-
-    python -m pip install -r requirements.txt
-
-After changing requirements.txt later, repeat this command and restart Uvicorn.
-This project also uses pypdf to read PDF attachments; reinstall the requirements
-after updating this version so PDF support is available.
-
-
-5. CONFIGURE LOCAL SETTINGS
----------------------------
-
-Copy the example settings file:
-
-    Copy-Item .env.example .env
 
 Open .env and replace JWT_SECRET with a random value of at least 32 characters.
 One way to create a value is:
@@ -63,7 +77,7 @@ For Hugging Face, put your access token in HF_TOKEN in .env. Do not share it
 or commit .env. Leave AUTH_MODE=local for the first run.
 
 
-6. START THE SERVER
+5. START THE SERVER
 -------------------
 
     python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
@@ -73,7 +87,7 @@ The dashboard is at http://127.0.0.1:8000/ and the API guide is at
 http://127.0.0.1:8000/docs.
 
 
-7. CHECK THE SERVER
+6. CHECK THE SERVER
 ------------------
 
 Open http://127.0.0.1:8000/health. A working server returns status "ok".
@@ -164,10 +178,12 @@ Runner model inside that configuration if you want its inference to stay local.
 11. OPTIONAL PUBLIC WEB RESEARCH
 -------------------------------
 
-In Team chat, select Search the public web and read pages for this message
-before sending. The local server searches DuckDuckGo's HTML results and reads
-text from a few public pages, then supplies that material to the specialists
-and controller. DuckDuckGo provides a non-JavaScript HTML search option.
+In Direct agent chat, select Search the public web for this reply. In Team chat,
+select Search the public web and read pages for this message. The local server
+searches DuckDuckGo's HTML results and reads text from a few public pages, then
+supplies that material to the selected agent or the team and controller.
+DuckDuckGo provides a non-JavaScript HTML search option; no search API key is
+required.
 
 Web use is off unless you turn it on for a message. When enabled, the message
 and search query are sent to the search service, and the server requests the
@@ -430,3 +446,113 @@ Uvicorn. This affects newly issued local tokens; a token already issued keeps
 its original expiration. Agent API keys can be used to request a fresh token.
 Cognito-issued token lifetimes are controlled by Cognito and are not changed by
 this local setting.
+
+
+22. LOCAL VIDEO STUDIO
+----------------------
+
+The dashboard Video studio can upload video clips, pictures, and audio files
+(up to 250 MB each), arrange up to 12 video/image clips, and render a 720p,
+24-fps MP4. The project checks its bundled FFmpeg/FFprobe files, installed
+project copies, and Windows PATH automatically. If FFmpeg or FFprobe is missing,
+click "Download & install FFmpeg + FFprobe" in Video studio. The official
+Windows essentials package is downloaded, checked, and installed under
+tools/runtime/ffmpeg/ inside this project. Keep Uvicorn running; the dashboard
+shows the download progress and refreshes the tool status when installation
+finishes. Click Refresh if the status does not update.
+
+For 3D titles and CGI, click "Download & install Blender" to get Blender's
+official portable Windows package and place it under tools/runtime/blender/ in
+this project. It does not require a system-wide installation. You can also
+install Blender manually; Video studio detects Blender on Windows PATH or in
+the project runtime folder. To create a starter scene, click "Get Blender
+title-card starter", open Blender's Scripting workspace, load the downloaded
+Python file, and run it. The starter is a script, not another Blender install;
+leaving a copy in tools/ is fine, but Blender must run it from the Scripting
+workspace. Edit the generated scene, then use File > Save As in Blender and save
+the .blend project in this project's video_studio/title_cards/ folder (create
+that folder in File Explorer if it does not exist). For example, save it as
+video_studio/title_cards/My-Show-Title.blend. The starter creates editable title
+text, a camera, lights, and a simple stage. The project keeps the downloaded
+runtime files local and does not commit them to source control.
+
+Select an optional audio track to mix it as a soundtrack; it loops to the end of
+the cut. The large Video playback window stays visible. Click a Recent render to
+watch it, or add a video file—including an agent-created MP4 saved on this
+computer—to the project, select its video clip in the rough-cut list, and click
+Play selected video clip. Download rendered MP4s from the player. Video assets
+and exports are stored locally in video_studio/.
+
+
+23. CHOOSE CPU OR NVIDIA GPU FOR MODEL TRAINING
+------------------------------------------------
+
+From PowerShell, first go to the project folder. Install the optional training
+packages into this project's .venv using exactly one of the following choices.
+Do not run the project-relative .venv command from C:\Windows\System32; that
+would use or create a different environment.
+
+For an NVIDIA GPU:
+
+.\.venv\Scripts\python.exe -m pip install -r requirements-training-gpu.txt
+
+For CPU-only training:
+
+.\.venv\Scripts\python.exe -m pip install -r requirements-training-cpu.txt
+
+The GPU requirements install PyTorch with CUDA 13.0. The CPU requirements
+install a CPU-only PyTorch build. Both install the shared Transformers training
+packages and NumPy. Restart Uvicorn after the install so the server loads the
+new packages.
+
+Important: run the install from this project folder and use the project's
+.venv path exactly. Installing into C:\Windows\System32\.venv or another
+Python environment will not change the Python used by this project.
+
+If pip says the GPU requirement is already satisfied but the version check
+below shows a CPU-only build, replace PyTorch directly with the CUDA wheel:
+
+.\.venv\Scripts\python.exe -m pip install --force-reinstall --no-deps --index-url https://download.pytorch.org/whl/cu130 "torch>=2.4,<3"
+
+To verify the project environment, run:
+
+.\.venv\Scripts\python.exe -c "import torch; print('PyTorch:', torch.__version__); print('CUDA:', torch.version.cuda); print('GPU ready:', torch.cuda.is_available()); print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'not detected')"
+
+In Fine-tune a local model, check the displayed Python path and PyTorch/CUDA
+versions to confirm the page is checking this project's .venv. A PyTorch version
+ending in +cu... and GPU ready: True confirm CUDA is installed in this
+environment. Turn on Use the NVIDIA GPU to use CUDA, or turn it off to force
+CPU training. The selection is saved in this project and applies to new
+training jobs. Automatic mode uses the GPU when this environment can see it.
+Restart Uvicorn after changing PyTorch packages so the server loads the same
+environment. If the status still shows a different Python path, start Uvicorn
+with .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host
+127.0.0.1 --port 8000 from this project folder.
+A job remembers its device choice; changing the switch does not move a job
+already in progress. Resume a saved job with its original device choice. A
+stopped job marked error has a Remove failed job button; it deletes the failed
+job entry, its saved input, and incomplete checkpoints. Any completed adapter is
+kept in Saved local models.
+
+Choose the pretrained model from the dropdown in Fine-tune a local model.
+Downloaded Hugging Face chat models are listed as local choices. Common Hub
+instruct models are also offered; those download their base files the first
+time training starts. New Hub downloads are kept under
+%LOCALAPPDATA%\AI_Agent_Credential_Service\hf_cache by default so OneDrive does
+not try to synchronize several-gigabyte weight files. You can still type a
+custom Hub model ID or select a local Transformers folder in the editable field
+below the dropdown.
+
+Trained LoRA adapters are small files and use their original base model when
+training or replying. Click Restore base model on an adapter card when its base
+is missing. The app first copies a complete model from an existing Hugging Face
+cache. If no complete cached copy exists, it downloads the base model into this
+project's base_models\ folder. Training and replies then use that project copy,
+so they do not need to fetch the same base model again. Multiple adapters can
+reuse the same base model folder.
+
+Incomplete transfers stay in base_models\.staging\ and can resume if you retry.
+Keep Uvicorn running while a restore is active. The finished base model is
+stored separately from trained_models\ adapters; it is not duplicated inside
+each adapter folder. The restore screen shows progress and confirms when the
+project copy is ready.
