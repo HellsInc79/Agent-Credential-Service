@@ -2,11 +2,11 @@
 import uuid
 import sqlite3
 import os
+from pathlib import Path
 
-DB_PATH = os.getenv(
-    "DATABASE_PATH",
-    "./agents.db"
-)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_DATABASE_SETTING = Path(os.getenv("DATABASE_PATH", "agents.db")).expanduser()
+DB_PATH = str(_DATABASE_SETTING if _DATABASE_SETTING.is_absolute() else (_PROJECT_ROOT / _DATABASE_SETTING).resolve())
 # app/persistent_agent_registry.py
 def disable_agent(
     agent_id

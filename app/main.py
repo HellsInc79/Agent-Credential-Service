@@ -1,6 +1,7 @@
 """Local-first multi-agent platform API served by Uvicorn."""
 
 import asyncio
+import mimetypes
 import os
 import requests
 import threading
@@ -9,11 +10,17 @@ from pathlib import Path
 from urllib.parse import quote
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field, field_validator
 
 load_dotenv()
+
+# Keep large model downloads in the user's local Windows profile by default,
+# outside project folders that may be synchronized by OneDrive.
+# Users can set HF_HOME in .env to choose a different cache location.
+_default_hf_home = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "AI_Agent_Credential_Service" / "hf_cache"
+os.environ.setdefault("HF_HOME", str(_default_hf_home))
 
 from app import database
 from app.agent_runtime import generate_for_agent
@@ -53,7 +60,10 @@ from app.platform_store import (
 from app.realtime import room_connections
 from app.web_tools import search_public_web
 from app.training import create_role_guides
+from app.local_model_training import create_model_backup, delete_failed_job as delete_failed_local_training_job, hardware_status as local_training_status, list_models as list_finetuned_models, list_pretrained_base_models, get_jobs as list_local_training_jobs, get_base_model_restore, start_base_model_restore, set_training_device_mode, resume_interrupted_jobs, resume_training as resume_local_training, start_training as start_local_training
+from app.local_tool_installer import list_installation_jobs as list_video_installations, start_installation as start_video_tool_installation
 from app.onion_tools import search_authorized_onion_sources
+from app.video_studio import VideoStudioError, blender_starter_script, get_job_path, get_video_asset_path, list_assets as list_video_assets, list_jobs as list_video_jobs, render_video, save_video_asset, tool_status as video_tool_status
 
 
 _room_epochs = {}
@@ -114,6 +124,7 @@ async def lifespan(_: FastAPI):
     init_platform_db()
     migrate_legacy_agents()
     seed_default_agents()
+    resume_interrupted_jobs()
     yield
 
 
@@ -130,7 +141,7 @@ class AgentCreate(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     profession: str = Field(min_length=1, max_length=120)
     rank: str = Field(default="Specialist", min_length=1, max_length=60)
-    provider: str = Field(default="ollama", pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai)$")
+    provider: str = Field(default="ollama", pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai|local-finetune)$")
     model_id: str = Field(default="llama3.2:3b", min_length=1, max_length=300)
     system_prompt: str = Field(default="", max_length=6000)
     provider_api_key: str | None = Field(default=None, max_length=3000)
@@ -149,7 +160,7 @@ class AgentUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=100)
     profession: str | None = Field(default=None, min_length=1, max_length=120)
     rank: str | None = Field(default=None, min_length=1, max_length=60)
-    provider: str | None = Field(default=None, pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai)$")
+    provider: str | None = Field(default=None, pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai|local-finetune)$")
     model_id: str | None = Field(default=None, min_length=1, max_length=300)
     system_prompt: str | None = Field(default=None, max_length=6000)
     enabled: bool | None = None
@@ -157,7 +168,7 @@ class AgentUpdate(BaseModel):
 
 class ModelImport(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    provider: str = Field(pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai)$")
+    provider: str = Field(pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai|local-finetune)$")
     model_id: str = Field(min_length=1, max_length=300)
     revision: str | None = Field(default=None, max_length=120)
     task: str = Field(default="text-generation", max_length=80)
@@ -193,7 +204,8 @@ class ChatRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=12000)
     room_name: str = Field(default="executive-board", min_length=1, max_length=80)
     agent_id: str | None = None
-    provider: str | None = Field(default=None, pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai)$")
+    use_web: bool = False
+    provider: str | None = Field(default=None, pattern="^(ollama|huggingface|docker-model-runner|docker-agent|openai|local-finetune)$")
     model_id: str | None = Field(default=None, max_length=300)
     attachment_ids: list[str] = Field(default_factory=list, max_length=5)
 
@@ -229,10 +241,29 @@ class AttachmentUpload(BaseModel):
     files: list[AttachmentPayload] = Field(min_length=1, max_length=5)
 
 
+class VideoRenderRequest(BaseModel):
+    title: str = Field(default="Untitled episode", max_length=120)
+    asset_ids: list[str] = Field(min_length=1, max_length=12)
+    audio_asset_id: str | None = None
+    image_seconds: int = Field(default=5, ge=1, le=60)
+
+
 class AgentTrainingRequest(BaseModel):
     files: list[AttachmentPayload] = Field(default_factory=list, max_length=50)
     agent_ids: list[str] = Field(default_factory=list, max_length=50)
     focus: str = Field(default="", max_length=3000)
+
+
+class LocalModelTrainingRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    base_model: str = Field(min_length=1, max_length=500)
+    dataset_jsonl: str = Field(min_length=1, max_length=12_000_000)
+    agent_id: str = Field(min_length=1, max_length=80)
+    epochs: int = Field(default=3, ge=1, le=5)
+
+
+class LocalTrainingSettingsUpdate(BaseModel):
+    device_mode: str = Field(pattern="^(auto|cpu|gpu)$")
 
 
 def public_agent(agent):
@@ -472,6 +503,72 @@ def local_models(_: dict | None = Depends(management_auth)):
     }
 
 
+@app.get("/v1/video/status")
+def video_status(_: dict | None = Depends(management_auth)):
+    return video_tool_status()
+
+
+@app.get("/v1/video/installations")
+def video_installation_jobs(_: dict | None = Depends(management_auth)):
+    return list_video_installations()
+
+
+@app.post("/v1/video/installations/{tool}", status_code=202)
+def install_video_tool(tool: str, _: dict | None = Depends(management_auth)):
+    try:
+        return start_video_tool_installation(tool.lower())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/v1/video/assets")
+def video_assets(_: dict | None = Depends(management_auth)):
+    return {"assets": list_video_assets()}
+
+
+@app.post("/v1/video/assets", status_code=201)
+async def upload_video_asset(request: Request, filename: str, _: dict | None = Depends(management_auth)):
+    try:
+        return {"asset": await save_video_asset(filename, request.stream())}
+    except VideoStudioError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.get("/v1/video/assets/{asset_id}/file")
+def play_video_asset(asset_id: str, _: dict | None = Depends(management_auth)):
+    item = get_video_asset_path(asset_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Video clip not found. Refresh the media list and try again.")
+    path, filename = item
+    return FileResponse(path, media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream", filename=filename, content_disposition_type="inline")
+
+
+@app.post("/v1/video/render", status_code=201)
+def render_video_project(body: VideoRenderRequest, _: dict | None = Depends(management_auth)):
+    try:
+        return render_video(body.title, body.asset_ids, body.image_seconds, body.audio_asset_id)
+    except VideoStudioError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+
+@app.get("/v1/video/jobs")
+def video_jobs(_: dict | None = Depends(management_auth)):
+    return {"jobs": list_video_jobs()}
+
+
+@app.get("/v1/video/jobs/{job_id}/file")
+def video_job_file(job_id: str, _: dict | None = Depends(management_auth)):
+    path = get_job_path(job_id)
+    if not path:
+        raise HTTPException(status_code=404, detail="Rendered video not found.")
+    return FileResponse(path, media_type="video/mp4", filename=path.name, content_disposition_type="inline")
+
+
+@app.get("/v1/video/blender-starter")
+def download_blender_starter(_: dict | None = Depends(management_auth)):
+    return Response(content=blender_starter_script(), media_type="text/x-python", headers={"Content-Disposition": "attachment; filename=series_title_card_starter.py"})
+
+
 @app.post("/v1/attachments", status_code=201)
 def upload_attachments(body: AttachmentUpload, _: dict | None = Depends(management_auth)):
     return {"attachments": save_uploaded_files([item.model_dump() for item in body.files])}
@@ -521,6 +618,87 @@ async def generate_agent_training(body: AgentTrainingRequest, _: dict | None = D
         "created": completed,
         "results": results,
     }
+
+
+@app.get("/v1/local-training/status")
+def local_model_training_environment(_: dict | None = Depends(management_auth)):
+    return local_training_status()
+
+
+@app.put("/v1/local-training/settings")
+def update_local_training_settings(body: LocalTrainingSettingsUpdate, _: dict | None = Depends(management_auth)):
+    set_training_device_mode(body.device_mode)
+    return local_training_status()
+
+
+@app.get("/v1/local-training/models")
+def local_model_training_models(_: dict | None = Depends(management_auth)):
+    return list_finetuned_models()
+
+
+@app.post("/v1/local-training/base-model-restores", status_code=202)
+def restore_local_training_base_model(body: dict, _: dict | None = Depends(management_auth)):
+    try:
+        return start_base_model_restore(body.get("model_id", ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.get("/v1/local-training/base-model-restores/{restore_id}")
+def local_training_base_model_restore_status(restore_id: str, _: dict | None = Depends(management_auth)):
+    result = get_base_model_restore(restore_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="That base-model restore job was not found.")
+    return result
+
+
+@app.get("/v1/local-training/base-models")
+def local_model_training_base_models(_: dict | None = Depends(management_auth)):
+    return list_pretrained_base_models()
+
+
+@app.get("/v1/local-training/models/{model_id}/backup")
+def download_local_model_backup(model_id: str, _: dict | None = Depends(management_auth)):
+    try:
+        archive = create_model_backup(model_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return FileResponse(archive, media_type="application/zip", filename=archive.name)
+
+
+@app.get("/v1/local-training/jobs")
+def local_model_training_jobs(_: dict | None = Depends(management_auth)):
+    return list_local_training_jobs()
+
+
+@app.post("/v1/local-training/jobs", status_code=202)
+def create_local_model_training_job(body: LocalModelTrainingRequest, _: dict | None = Depends(management_auth)):
+    try:
+        return start_local_training(body.name, body.base_model, body.dataset_jsonl, body.epochs, body.agent_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/v1/local-training/jobs/{job_id}/resume", status_code=202)
+def resume_local_model_training_job(job_id: str, _: dict | None = Depends(management_auth)):
+    try:
+        return resume_local_training(job_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@app.delete("/v1/local-training/jobs/{job_id}")
+def delete_local_model_training_job(job_id: str, _: dict | None = Depends(management_auth)):
+    try:
+        return delete_failed_local_training_job(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.get("/v1/training/files")
@@ -621,8 +799,6 @@ async def room_chat(room_name: str, body: RoomMessageRequest, claims: dict = Dep
         return await _orchestrate_in_thread(request)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/v1/chat")
@@ -640,10 +816,19 @@ async def chat(body: ChatRequest, claims: dict = Depends(local_chat_claims)):
     }
     saved = _add_room_event(user_message)
     await room_connections.broadcast(body.room_name, saved)
+    web_context = ""
+    web_search = {"status": "disabled", "error": ""}
+    if body.use_web:
+        try:
+            web_context = await asyncio.to_thread(search_public_web, body.prompt)
+            web_search["status"] = "no_results" if web_context.startswith("Web search returned no readable public pages") else "complete"
+        except Exception as exc:
+            web_search = {"status": "failed", "error": f"Public web search could not complete: {str(exc)[:300]}"}
     try:
         answer = await asyncio.to_thread(
             generate_for_agent, target, prompt, images,
             body.provider or target["provider"], body.model_id or target["model_id"],
+            web_context,
         )
     except Exception as exc:
         detail = str(exc)
@@ -658,7 +843,7 @@ async def chat(body: ChatRequest, claims: dict = Depends(local_chat_claims)):
         "sender_title": target["title"], "content": answer, "message_type": "agent",
     })
     await room_connections.broadcast(body.room_name, response)
-    return {"agent": public_agent(target), "response": answer, "room_name": body.room_name}
+    return {"agent": public_agent(target), "response": answer, "room_name": body.room_name, "web_search": web_search}
 
 
 @app.post("/v1/orchestrate")
