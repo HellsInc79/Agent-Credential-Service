@@ -1,0 +1,38 @@
+# These are supported funding model platforms
+
+github: # Replace with up to 4 GitHub Sponsors-enabled usernames e.g., [user1, user2]
+patreon: # Replace with a single Patreon username
+open_collective: # Replace with a single Open Collective username
+ko_fi: # Replace with a single Ko-fi username
+tidelift: # Replace with a single Tidelift platform-name/package-name e.g., npm/babel
+community_bridge: # Replace with a single Community Bridge project-name e.g., cloud-foundry
+liberapay: # Replace with a single Liberapay username
+issuehunt: # Replace with a single IssueHunt username
+lfx_crowdfunding: # Replace with a single LFX Crowdfunding project-name e.g., cloud-foundry
+polar: # Replace with a single Polar username
+buy_me_a_coffee: # Replace with a single Buy Me a Coffee username
+thanks_dev: # Replace with a single thanks.dev username
+custom: # Replace with up to 4 custom sponsorship URLs e.g., ['link1', 'link2']
+Ethereum (MetaMask)
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Bitcoin (native segwit)
+bc1qwqw859nvgvel8evjg82gtnd4e9cngd0nu5xlvp
+Solana
+hUKYfAkfjd34DfJaB5rE5hqAW7XmYkQLA51UjC4bq5D
+Linea
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Base
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Arbitrum
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+BNB Chain
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Optimism
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Polygon
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Monad
+0xB19A0769D60890ce62B45b534c339B5ea1A495c4
+Tron
+TKcNHBdbgNTdXxo6jtGewMh3eQfmcN1rbM
+Send each network’s funds only on that network (e.g. don’t send Ethereum on BNB Chain — the transaction can be lost). These addresses never change. If anyone claims Agent-Credential-Service has moved to a new address or asks you to send somewhere else, it’s a scam — it would be someone impersonating this page.
