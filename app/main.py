@@ -64,6 +64,7 @@ from app.local_model_training import create_model_backup, delete_failed_job as d
 from app.local_tool_installer import list_installation_jobs as list_video_installations, start_installation as start_video_tool_installation
 from app.onion_tools import search_authorized_onion_sources
 from app.video_studio import VideoStudioError, blender_starter_script, get_job_path, get_video_asset_path, list_assets as list_video_assets, list_jobs as list_video_jobs, render_video, save_video_asset, tool_status as video_tool_status
+from app import wan_video
 
 
 _room_epochs = {}
@@ -246,6 +247,15 @@ class VideoRenderRequest(BaseModel):
     asset_ids: list[str] = Field(min_length=1, max_length=12)
     audio_asset_id: str | None = None
     image_seconds: int = Field(default=5, ge=1, le=60)
+
+
+class WanVideoRequest(BaseModel):
+    title: str = Field(default="AI generated video", max_length=120)
+    prompt: str = Field(min_length=8, max_length=3000)
+    negative_prompt: str = Field(default="", max_length=1200)
+    width: int = Field(default=832, ge=256, le=1024)
+    height: int = Field(default=480, ge=256, le=1024)
+    frames: int = Field(default=33, ge=1, le=81)
 
 
 class AgentTrainingRequest(BaseModel):
@@ -506,6 +516,42 @@ def local_models(_: dict | None = Depends(management_auth)):
 @app.get("/v1/video/status")
 def video_status(_: dict | None = Depends(management_auth)):
     return video_tool_status()
+
+
+@app.get("/v1/video/generator/status")
+def video_generator_status(_: dict | None = Depends(management_auth)):
+    return wan_video.status()
+
+
+@app.post("/v1/video/generator/start", status_code=202)
+def start_video_generator(_: dict | None = Depends(management_auth)):
+    try:
+        return wan_video.start_engine()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/v1/video/generator/jobs", status_code=202)
+def create_video_generation(body: WanVideoRequest, _: dict | None = Depends(management_auth)):
+    try:
+        return wan_video.start_generation(body.title, body.prompt, body.negative_prompt, body.width, body.height, body.frames)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.get("/v1/video/generator/jobs")
+def video_generation_jobs(_: dict | None = Depends(management_auth)):
+    return {"jobs": wan_video.list_jobs()}
+
+
+@app.get("/v1/video/generator/jobs/{job_id}")
+def video_generation_job(job_id: str, _: dict | None = Depends(management_auth)):
+    job = wan_video.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Video generation job not found.")
+    return job
 
 
 @app.get("/v1/video/installations")

@@ -233,6 +233,33 @@ def render_video(title, asset_ids, image_seconds=5, audio_asset_id=None):
     return job
 
 
+def register_generated_video(title, media, duration_seconds, prompt):
+    """Persist a locally generated video alongside ordinary Video Studio renders."""
+    if not media or len(media) < 1024:
+        raise VideoStudioError("The video generator returned an empty or incomplete file.", 502)
+    job_id = uuid.uuid4().hex
+    exports = _root() / "exports"
+    exports.mkdir(parents=True, exist_ok=True)
+    final_path = exports / f"{job_id}.mp4"
+    final_path.write_bytes(media)
+    clean_title = re.sub(r"\s+", " ", str(title or "AI generated video")).strip()[:120] or "AI generated video"
+    job = {
+        "id": job_id,
+        "title": clean_title,
+        "filename": f"{_safe_filename(clean_title)}.mp4",
+        "asset_ids": [],
+        "audio_asset_id": None,
+        "duration_seconds": round(float(duration_seconds), 2),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "size": final_path.stat().st_size,
+        "download_url": f"/v1/video/jobs/{job_id}/file",
+        "source": "Wan 2.1 T2V 1.3B",
+        "prompt": str(prompt or "")[:3000],
+    }
+    (exports / f"{job_id}.json").write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+    return job
+
+
 def list_jobs():
     folder = _root() / "exports"
     if not folder.exists():

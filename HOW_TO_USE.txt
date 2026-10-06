@@ -20,7 +20,8 @@ access token that has permission to use the model/provider you selected.
 
 Open PowerShell and move into the Windows project folder:
 
-    Set-Location -LiteralPath "C:\Users\Hells\OneDrive\Documents\apikey agent hack\AI_Agent_Credential_Service_Python (1)\agent_credential_service"
+    $projectPath = Read-Host "Enter the path to the project folder"
+    Set-Location -LiteralPath $projectPath
 
 The folder should contain app\main.py and requirements.txt. You can also open
 PowerShell from File Explorer by opening the project folder, clicking the
@@ -556,3 +557,35 @@ Keep Uvicorn running while a restore is active. The finished base model is
 stored separately from trained_models\ adapters; it is not duplicated inside
 each adapter folder. The restore screen shows progress and confirms when the
 project copy is ready.
+
+
+23. LOCAL AI VIDEO GENERATION WITH WAN 2.1
+-----------------------------------------
+
+The Video studio can generate short text-to-video clips locally with Wan 2.1
+T2V 1.3B. The project uses ComfyUI's official Windows NVIDIA portable runtime,
+installed under tools\runtime\ComfyUI_windows_portable\. The runtime has its
+own Python and CUDA-enabled PyTorch, so it does not replace the platform's
+.venv or change its GPU fine-tuning setup. The video engine only listens on
+this computer at 127.0.0.1:8188.
+
+Wan's model files are kept in this project's ignored base_models\ folder: the
+Wan 1.3B checkpoint at base_models\wan2.1_t2v_1.3B_fp16.safetensors, the UMT5
+FP8 text encoder in base_models\Wan2.1\split_files\text_encoders\, and the
+Wan 2.1 VAE in base_models\Wan2.1\split_files\vae\. The dashboard checks
+for all three and shows whether the engine is installed, running, and ready.
+
+In Video studio, enter a visual description and optionally a negative prompt,
+choose landscape, portrait, or square, and pick a short, medium, or long clip.
+Click Generate video locally. If ComfyUI is not already running, the app starts
+it automatically. First startup can take a minute while ComfyUI loads; video
+generation then uses the NVIDIA GPU and may take several minutes. Generated
+MP4s appear in Recent renders and open in the large playback window. Wan is
+primarily a clip generator; assemble longer episodes from generated clips and
+other media with the timeline and FFmpeg renderer. Chichu can help write the
+script, shot description, and generation prompt, while Wan produces the clip.
+
+ComfyUI's startup and error log is tools\runtime\comfyui.log. If the engine
+status does not update after setup, use Refresh in Video studio and confirm no
+other app is using local port 8188. Large runtimes and model weights are ignored
+by source control and are not published with the source project.

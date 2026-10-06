@@ -16,6 +16,7 @@ A local-first Python platform for a team of AI agents with named jobs and ranks.
 - Hugging Face providers accept Hub IDs and Hugging Face cache folder paths; local Transformers model folders can run directly from disk. New Hugging Face downloads use `%LOCALAPPDATA%\AI_Agent_Credential_Service\hf_cache` by default to keep large weights outside cloud-synced project folders (override with `HF_HOME` in `.env`).
 - Local chat uploads for images, PDFs, and text/code files, plus downloadable Markdown replies and code blocks.
 - Local Video Studio with a large playback window for rendered episodes and source clips, plus automatic detection of bundled FFmpeg/FFprobe and project-local downloads of FFmpeg/FFprobe and portable Blender.
+- Local AI text-to-video generation through project-local ComfyUI with Wan 2.1 T2V 1.3B, the matching UMT5 FP8 text encoder and Wan VAE, generated-video playback/download, and persisted render history.
 - An Agent Training area that accepts files or folders, creates downloadable role-specific Markdown learning guides, and includes those guides in later agent conversations.
 - Local LoRA fine-tuning of pretrained chat models into private adapters, saved in this project with resumable checkpoints and controls to remove failed jobs.
 - Fine-tuning includes a base-model picker for cached Hugging Face chat models and common instruct models from the Hub; cached models load from local snapshots, while uncached selections download on the first training run.
